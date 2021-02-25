@@ -510,6 +510,88 @@ const htmlStr = await render(this.ctx, config)
 
 此种场景多用于应急预案处理。
 
+#### 如何自定义页面标题, meta 等信息
+
+由于我们 All in jsx/template, 这块的实现也是非常简单的。layout 在服务端被渲染时可以拿到请求的 ctx，根据 ctx 上的信息来 render 不同的信息
+
+Vue 使用方式如下
+
+```vue
+<template>
+  <!-- 注：Layout 只会在服务端被渲染，不要在此运行客户端有关逻辑 -->
+  <!-- 页面初始化数据注入内容已经过 serialize-javascript 转义 防止 xss -->
+  <html>
+    <head>
+      <meta charSet="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+      <meta name="theme-color" content="#000000">
+      <title v-if="ctx.request.path === '/'">
+        首页
+      </title>
+      <title v-if="ctx.request.path.match('/detail')">
+        详情页
+      </title>
+      <!-- 初始化移动端 rem 设置，如不需要可自行删除 -->
+      <slot name="remInitial" />
+      <!-- 用于通过配置插入自定义的 script 为了避免影响期望功能这块内容不做 escape，为了避免 xss 需要保证插入脚本代码的安全性  -->
+      <slot name="customeHeadScript" />
+      <slot name="cssInject" />
+    </head>
+    <body>
+      <slot name="children" />
+      <slot name="initialData" />
+      <slot name="jsInject" />
+    </body>
+  </html>
+</template>
+
+<script>
+export default {
+  props: ['ctx', 'config'],
+  created () {
+    console.log(this.ctx.request.path)
+  }
+}
+</script>
+
+<style lang="less">
+@import './index.less';
+</style>
+
+```
+
+React 使用则更简单 
+
+```js
+const Layout = (props: LayoutProps) => {
+  // 注：Layout 只会在服务端被渲染，不要在此运行客户端有关逻辑
+  const { state } = useContext(window.STORE_CONTEXT)
+  const { injectCss, injectScript } = props.staticList!
+  return (
+    <html lang='en'>
+      <head>
+        <meta charSet='utf-8' />
+        <meta name='viewport' content='width=device-width, initial-scale=1, shrink-to-fit=no' />
+        <meta name='theme-color' content='#000000' />
+        <title>{props.ctx.request.path === '/' ? '首页' : '其他页面'}</title>
+        <script dangerouslySetInnerHTML={{ __html: "var w = document.documentElement.clientWidth / 3.75;document.getElementsByTagName('html')[0].style['font-size'] = w + 'px'" }} />
+        { injectCss }
+      </head>
+      <body className={styles.body}>
+        <div id='app'>{ props.children }</div>
+        {
+          state && <script dangerouslySetInnerHTML={{
+            __html: `window.__USE_SSR__=true; window.__INITIAL_DATA__ =${serialize(state)}`
+          }} />
+        }
+        { injectScript }
+      </body>
+    </html>
+  )
+}
+
+```
+
 #### React跨组件通信
 
 通过使用 `useContext` 来获取全局的 `context`, `useContext` 返回两个值分别为
